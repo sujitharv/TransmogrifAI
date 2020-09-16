@@ -34,7 +34,7 @@ import com.salesforce.op.features.types._
 import org.apache.spark.ml.classification.ProbabilisticClassificationModel
 import org.apache.spark.ml.linalg.Vector
 
-import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
 /**
  * Class that takes in a spark ProbabilisticClassifierModel and wraps it into an OP model which returns a
@@ -45,17 +45,16 @@ import scala.reflect.ClassTag
  * @param operationName unique name of the operation this stage performs
  * @tparam T type of the model to wrap
  */
-abstract class OpProbabilisticClassifierModel[T <: ProbabilisticClassificationModel[Vector, T] : ClassTag]
+abstract class OpProbabilisticClassifierModel[T <: ProbabilisticClassificationModel[Vector, T]]
 (
   sparkModel: T,
   uid: String,
   operationName: String
 ) extends OpPredictorWrapperModel[T](uid = uid, operationName = operationName, sparkModel = sparkModel) {
 
-  @transient private lazy val predictRawMirror = getSparkOrLocalMethod("predictRaw", "predictRaw")
-  @transient private lazy val raw2probabilityMirror = getSparkOrLocalMethod("raw2probability", "rawToProbability")
-  @transient private lazy val probability2predictionMirror = getSparkOrLocalMethod("probability2prediction",
-    "probabilityToPrediction")
+  protected def predictRawMirror: MethodMirror
+  protected def raw2probabilityMirror: MethodMirror
+  protected def probability2predictionMirror: MethodMirror
 
   protected def predictRaw(features: Vector): Vector = predictRawMirror.apply(features).asInstanceOf[Vector]
   protected def raw2probability(raw: Vector): Vector = raw2probabilityMirror.apply(raw).asInstanceOf[Vector]
@@ -65,7 +64,7 @@ abstract class OpProbabilisticClassifierModel[T <: ProbabilisticClassificationMo
   /**
    * Function used to convert input to output
    */
-  override def transformFn: (RealNN, OPVector) => Prediction = (_, features) => {
+  override def transformFn: (RealNN, OPVector) => Prediction = (label, features) => {
     val raw = predictRaw(features.value)
     val prob = raw2probability(raw)
     val pred = probability2prediction(prob)

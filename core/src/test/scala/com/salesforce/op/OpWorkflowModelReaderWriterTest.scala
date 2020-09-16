@@ -33,14 +33,13 @@ package com.salesforce.op
 import java.io.File
 
 import com.salesforce.op.OpWorkflowModelReadWriteShared.FieldNames._
-import com.salesforce.op.features.types.{OPVector, Real, RealNN}
+import com.salesforce.op.features.types.{OPVector, Real}
 import com.salesforce.op.features.{FeatureBuilder, FeatureSparkTypes, OPFeature}
 import com.salesforce.op.filters._
 import com.salesforce.op.readers.{AggregateAvroReader, DataReaders}
 import com.salesforce.op.stages.OPStage
 import com.salesforce.op.stages.sparkwrappers.specific.OpEstimatorWrapper
-import com.salesforce.op.test.{Passenger, PassengerSparkFixtureTest, TestFeatureBuilder}
-import com.salesforce.op.testkit.{RandomReal, RandomVector}
+import com.salesforce.op.test.{Passenger, PassengerSparkFixtureTest}
 import org.apache.spark.ml.feature.{StandardScaler, StandardScalerModel}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.Row
@@ -142,20 +141,19 @@ class OpWorkflowModelReaderWriterTest
   }
 
   trait SwSingleStageFlow {
-
-    val vector = RandomVector.dense(RandomReal.uniform[Real](-1.0, 1.0), 20).take(10)
-    val (data, vec) = TestFeatureBuilder[OPVector]("vec", vector.toSeq)
-    val scaler = new StandardScaler().setWithStd(true).setWithMean(false)
-    val scaled = new OpEstimatorWrapper[OPVector, OPVector, StandardScaler, StandardScalerModel](scaler)
-      .setInput(vec).getOutput()
+    val vec = FeatureBuilder.OPVector[Passenger].extract(new OpWorkflowModelReaderWriterTest.EmptyVectorFn).asPredictor
+    val scaler = new StandardScaler().setWithStd(false).setWithMean(false)
+    val schema = FeatureSparkTypes.toStructType(vec)
+    val data = spark.createDataFrame(List(Row(Vectors.dense(1.0))).asJava, schema)
+    val swEstimatorModel = new OpEstimatorWrapper[OPVector, OPVector, StandardScaler, StandardScalerModel](scaler)
+      .setInput(vec).fit(data)
+    val scaled = vec.transformWith(swEstimatorModel)
     val wf = new OpWorkflow()
       .setParameters(workflowParams)
-      .setInputDataset(data)
+      .setReader(dummyReader)
       .setResultFeatures(scaled)
       .setRawFeatureFilterResults(rawFeatureFilterResults)
-
-    val wfM = wf.train()
-    val jsonModel = parse(OpWorkflowModelWriter.toJson(wfM, saveModelPath))
+    val (wfM, jsonModel) = makeModelAndJson(wf)
   }
 
   trait OldVectorizedFlow extends UIDReset {
@@ -251,9 +249,7 @@ class OpWorkflowModelReaderWriterTest
   it should "load proper workflow with spark wrapped stages" in new SwSingleStageFlow {
     wfM.save(saveModelPath)
     val wfMR = wf.loadModel(saveModelPath).setReader(wfM.getReader())
-    val wfMRnoWF = OpWorkflowModel.load(saveModelPath).setReader(wfM.getReader())
     assert(wfMR, wfM)
-    assert(wfMRnoWF, wfM)
   }
 
   it should "work for models" in new SingleStageFlow {

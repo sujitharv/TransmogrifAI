@@ -33,7 +33,6 @@ package com.salesforce.op.local
 import com.salesforce.op.test.TestCommon
 import ml.combust.mleap.core.feature._
 import ml.combust.mleap.core.types.ScalarShape
-import ml.combust.mleap.runtime.transformer.feature._
 import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
 import org.junit.runner.RunWith
 import org.scalatest.PropSpec
@@ -43,7 +42,7 @@ import org.scalatest.prop.PropertyChecks
 @RunWith(classOf[JUnitRunner])
 class MLeapModelConverterTest extends PropSpec with PropertyChecks with TestCommon {
 
-  val mleapModels = Table("mleapModels", // TODO wrap these in mleap transformers
+  val mleapModels = Table("mleapModels",
     BinarizerModel(0.0, ScalarShape()),
     BucketedRandomProjectionLSHModel(Seq(), 0.0, 0),
     BucketizerModel(Array.empty),

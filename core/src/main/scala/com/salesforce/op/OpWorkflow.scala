@@ -347,10 +347,19 @@ class OpWorkflow(val uid: String = UID[OpWorkflow]) extends OpWorkflowCore {
   def train(persistEveryKStages: Int = OpWorkflowModel.PersistEveryKStages)
     (implicit spark: SparkSession): OpWorkflowModel = {
 
-    val rawData = generateRawData()
-    // Update features with fitted stages
-    val fittedStages = fitStages(data = rawData, stagesToFit = stages, persistEveryKStages)
-    val newResultFeatures = resultFeatures.map(_.copyWithNewStages(fittedStages))
+    val (fittedStages, newResultFeatures) =
+      if (stages.exists(_.isInstanceOf[Estimator[_]])) {
+        val rawData = generateRawData()
+        // Update features with fitted stages
+        val fittedStgs = fitStages(data = rawData, stagesToFit = stages, persistEveryKStages)
+        val newResultFtrs = resultFeatures.map(_.copyWithNewStages(fittedStgs))
+        fittedStgs -> newResultFtrs
+      } else if (rawFeatureFilter.nonEmpty) {
+        generateRawData()
+        stages -> resultFeatures
+      } else {
+        stages -> resultFeatures
+      }
 
     val model =
       new OpWorkflowModel(uid, getParameters())
@@ -388,6 +397,10 @@ class OpWorkflow(val uid: String = UID[OpWorkflow]) extends OpWorkflowCore {
       .map(_.filter(s => stagesToFit.contains(s._1)))
       .filter(_.nonEmpty)
 
+    // Search for the last estimator
+    val indexOfLastEstimator: Option[Int] =
+      dag.collect { case seq if seq.exists(_._1.isInstanceOf[Estimator[_]]) => seq.head._2 }.lastOption
+
     // doing regular workflow fit without workflow level CV
     if (!isWorkflowCV) {
       // The cross-validation job group is handled in the appropriate Estimator
@@ -397,6 +410,7 @@ class OpWorkflow(val uid: String = UID[OpWorkflow]) extends OpWorkflowCore {
           train = train,
           test = test,
           hasTest = hasTest,
+          indexOfLastEstimator = indexOfLastEstimator,
           persistEveryKStages = persistEveryKStages
         ).transformers
       }
@@ -413,6 +427,7 @@ class OpWorkflow(val uid: String = UID[OpWorkflow]) extends OpWorkflowCore {
             train = train,
             test = test,
             hasTest = hasTest,
+            indexOfLastEstimator = indexOfLastEstimator,
             persistEveryKStages = persistEveryKStages
           )
         }
@@ -443,6 +458,7 @@ class OpWorkflow(val uid: String = UID[OpWorkflow]) extends OpWorkflowCore {
               train = trainFixed,
               test = testFixed,
               hasTest = hasTest,
+              indexOfLastEstimator = indexOfLastEstimator,
               persistEveryKStages = persistEveryKStages,
               fittedTransformers = beforeTransformers
             ).transformers

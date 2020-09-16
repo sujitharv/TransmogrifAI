@@ -34,12 +34,9 @@ import com.salesforce.op.UID
 import com.salesforce.op.features.types.{OPVector, Prediction, RealNN}
 import com.salesforce.op.stages.impl.CheckIsResponseValues
 import com.salesforce.op.stages.sparkwrappers.specific.{OpPredictionModel, OpPredictorWrapper}
-import ml.dmlc.xgboost4j.scala.{DMatrix, EvalTrait, ObjectiveTrait}
-import ml.dmlc.xgboost4j.scala.spark.{DataUtils, OpXGBoost, OpXGBoostRegressorParams, TrackerConf, XGBoost, XGBoostRegressionModel, XGBoostRegressor}
-import org.apache.spark.ml.linalg.Vector
-import ml.combust.mleap.xgboost.runtime.{XGBoostRegressionModel => MleapXGBoostRegressionModel}
+import ml.dmlc.xgboost4j.scala.{EvalTrait, ObjectiveTrait}
+import ml.dmlc.xgboost4j.scala.spark.{OpXGBoostRegressorParams, TrackerConf, XGBoostRegressionModel, XGBoostRegressor}
 
-import scala.collection.Iterator
 import scala.reflect.runtime.universe.TypeTag
 
 /**
@@ -364,27 +361,4 @@ class OpXGBoostRegressionModel
   ttov: TypeTag[Prediction#Value]
 ) extends OpPredictionModel[XGBoostRegressionModel](
   sparkModel = sparkModel, uid = uid, operationName = operationName
-) {
-  import OpXGBoost._
-
-  @transient private lazy val localModel = getLocalMlStage()
-    .map{ s => s.model.asInstanceOf[MleapXGBoostRegressionModel] }
-
-  @transient private lazy val localPredict = localModel.map{ model =>
-    features: Vector => {
-      // Put data into correct format for XGBoostMleap
-      val dm = new DMatrix(processMissingValues(Iterator(features.asXGB), 0.0F))
-      model.predict(data = dm)
-    }
-  }
-
-  @transient private lazy val sparkPredict = getSparkMlStage().map(s => s.predict(_))
-
-  override protected def predict(features: Vector): Double = {
-    sparkPredict
-      .orElse(localPredict)
-      .getOrElse(throw new RuntimeException("Failed to find spark or local xgboost stage"))
-      .apply(features)
-  }
-}
-
+)

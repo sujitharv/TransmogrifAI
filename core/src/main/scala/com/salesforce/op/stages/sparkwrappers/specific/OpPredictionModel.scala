@@ -31,11 +31,9 @@
 package com.salesforce.op.stages.sparkwrappers.specific
 
 import com.salesforce.op.features.types.{OPVector, Prediction, RealNN}
-import com.salesforce.op.utils.reflection.ReflectionUtils.reflectMethod
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.linalg.Vector
 
-import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
 /**
@@ -52,13 +50,19 @@ abstract class OpPredictionModel[T <: PredictionModel[Vector, T]]
   sparkModel: T,
   uid: String,
   operationName: String
-)(
-  implicit ctag: ClassTag[T]
 ) extends OpPredictorWrapperModel[T](uid = uid, operationName = operationName, sparkModel = sparkModel) {
+
+  /**
+   * Predict label for the given features
+   */
+  @transient protected lazy val predict: Vector => Double = getSparkMlStage().getOrElse(
+    throw new RuntimeException(s"Could not find the wrapped Spark stage.")
+  ).predict(_)
 
   /**
    * Function used to convert input to output
    */
-  override def transformFn: (RealNN, OPVector) => Prediction = (_, features) =>
+  override def transformFn: (RealNN, OPVector) => Prediction = (label, features) =>
     Prediction(prediction = predict(features.value))
+
 }

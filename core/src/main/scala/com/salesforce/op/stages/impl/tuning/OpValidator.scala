@@ -260,7 +260,8 @@ private[op] trait OpValidator[M <: Model[_], E <: Estimator[_]] extends Serializ
       dag = dag,
       train = training,
       test = validation,
-      hasTest = true
+      hasTest = true,
+      indexOfLastEstimator = Option(-1)
     )
     val selectTrain = newTrain.select(label, features)
     val selectTest = newTest.select(label, features)
